@@ -98,6 +98,8 @@ service rabbitmq-server restart
 ~~~
 ubuntu에서 http://localhost:15672 로 접속
 
+![7](https://user-images.githubusercontent.com/37536415/61681614-28309080-ad49-11e9-8a0e-5c1908045f89.png)
+
 -------------
 
 ## create key(CA, server, client)
@@ -229,6 +231,127 @@ cd ../server
 openssl pkcs12 -export -out keycert.p12 -in cert.pem -inkey key.pem -passout pass:MySecretPassword
 ~~~
 결과 : <img width="619" alt="6" src="https://user-images.githubusercontent.com/37536415/61681228-a724c980-ad47-11e9-93ad-f46d8b7a9edd.png">
+
+
+5) client 용 key 생성
+- rabbitmq 디렉토리로 이동(/etc/rabbitmq)
+~~~
+cd etc/rabbitmq
+~~~
+- client 디렉토리 생성
+~~~
+mkdir client
+cd client
+~~~
+- key 생성
+~~~
+openssl genrsa -out key.pem 2048
+
+openssl req -new -key key.pem -out req.pem -outform PEM \
+    -subj /CN=$(hostname)/O=client/ -nodes
+    
+cd ../testca
+
+openssl ca -config openssl.cnf -in ../client/req.pem -out \
+    ../client/cert.pem -notext -batch -extensions client_ca_extensions
+    
+cd ../client
+
+openssl pkcs12 -export -out keycert.p12 -in cert.pem -inkey key.pem -passout pass:MySecretPassword
+~~~
+##### client key 생성은 server와 거의 비슷(차이점 ==> Server : keyUsage = keyEncipherment / Client : keyUsage = digitalSignature)
+
+
+--------
+
+## SSL 사용하기
+
+config file에 설정
+defualt rabbitmq는 config file이 없음(rabbitmq-env.conf 파일은 config 파일이 아님)
+
+![8](https://user-images.githubusercontent.com/37536415/61681615-28c92700-ad49-11e9-9071-42655d56fdb8.png)
+
+위의 사진은 http://localhost:15672 의 일부분이다.
+처음에는 rabbitmq.config 파일 옆에 (not found) 라고 적혀있을 것이다.
+
+###### 즉, /etc/rabbitmq 경로에 rabbitmq.config 파일을 생성해주어야 한다.
+~~~
+cd /etc/rabbitmq
+vi rabbitmq.config
+~~~
+rabbitmq.config 파일에 아래의 내용을 넣어준다.
+~~~
+[
+  {rabbit, [
+     {ssl_listeners, [5671]},				
+     {ssl_options, [{cacertfile,"/etc/rabbitmq/testca/cacert.pem"},		
+                    {certfile,"/etc/rabbitmq/server/cert.pem"},			
+                    {keyfile,"/etc/rabbitmq/server/key.pem"},			
+                    {verify,verify_peer},				
+                    {fail_if_no_peer_cert,false}]}		
+   ]}
+].
+~~~
+
+시스템에서 지원하는 chpher suites나 ssl version 확인하기
+~~~
+rabbitmqctl eval 'ssl:cipher_suites(openssl).'
+~~~
+~~~
+erl
+1> ssl:verions().
+~~~
+결과 : <img width="519" alt="9" src="https://user-images.githubusercontent.com/37536415/61681812-0552ac00-ad4a-11e9-98b4-6458b545c21a.png">
+
+###### ssl version을 확인하면, 'tlsv1.2', 'tlsv1.1', tlsv1 인 것을 볼 수 있다.
+<img width="289" alt="10" src="https://user-images.githubusercontent.com/37536415/61681905-55ca0980-ad4a-11e9-8785-f22b3ff3a5ab.png">
+
+----------
+### 인증서 합치기
+~~~
+cat testca/cacert.pem >> all_cacerts.pem
+
+cat otherca/cacert.pem >> all_cacerts.pem
+~~~
+
+-------
+
+### SSL/TLS 버젼 설정
+
+- rabbitmq.config 파일 내용 변경
+~~~
+[
+ {ssl, [{versions, ['tlsv1.2', 'tlsv1.1', tlsv1]}]},
+  {rabbit, [
+     {ssl_listeners, [5671]},
+     {ssl_options, [{cacertfile,"/etc/rabbitmq/testca/cacert.pem"},
+                    {certfile,"/etc/rabbitmq/server/cert.pem"},
+                    {keyfile,"/etc/rabbitmq/server/key.pem"},
+                    {verify,verify_peer},
+                    {versions, ['tlsv1.2', 'tlsv1.1', tlsv1]},
+                    {fail_if_no_peer_cert,false}]}
+   ]}
+].
+~~~
+##### config 파일을 수정했다면, 항상 restart
+~~~
+service rabbitmq-server restart
+~~~
+
+- openssl을 통한 연결 확인
+~~~
+openssl s_client -connect 127.0.0.1:5671 -tls1
+
+openssl s_client -connect 127.0.0.1:5671 -tls1_2
+~~~
+
+## 위의 코드를 실행하고 만약 erro104를 만났을 때(아래 사진), log 파일 확인하기
+<img width="422" alt="1" src="https://user-images.githubusercontent.com/37536415/61682081-3b446000-ad4b-11e9-9f0e-93e18db0eb5d.png">
+
+
+![8](https://user-images.githubusercontent.com/37536415/61681615-28c92700-ad49-11e9-9071-42655d56fdb8.png)
+
+
 
 
 
