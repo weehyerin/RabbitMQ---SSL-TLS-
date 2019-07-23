@@ -236,7 +236,7 @@ openssl pkcs12 -export -out keycert.p12 -in cert.pem -inkey key.pem -passout pas
 5) client 용 key 생성
 - rabbitmq 디렉토리로 이동(/etc/rabbitmq)
 ~~~
-cd etc/rabbitmq
+cd /etc/rabbitmq
 ~~~
 - client 디렉토리 생성
 ~~~
@@ -346,13 +346,148 @@ openssl s_client -connect 127.0.0.1:5671 -tls1_2
 ~~~
 
 ## 위의 코드를 실행하고 만약 erro104를 만났을 때(아래 사진), log 파일 확인하기
+### openssl s_client error104
+
 <img width="422" alt="1" src="https://user-images.githubusercontent.com/37536415/61682081-3b446000-ad4b-11e9-9f0e-93e18db0eb5d.png">
 
+#### 로그 파일의 위치
+<img width="486" alt="2" src="https://user-images.githubusercontent.com/37536415/61682218-bb6ac580-ad4b-11e9-920d-4ef338ba4517.png">
 
-![8](https://user-images.githubusercontent.com/37536415/61681615-28c92700-ad49-11e9-9071-42655d56fdb8.png)
+~~~
+cd /var/log/rabbitmq
+
+vi 해당 파일
+~~~
+
+- error report 확인
+![3](https://user-images.githubusercontent.com/37536415/61682452-b3f7ec00-ad4c-11e9-9f57-8ef3445598e3.png)
 
 
+해당 위치의 .pem의 권한이 잘못된 것
+root에서 rabbitmq로 권한을 바꿔주기
 
+- 잘못된 .pem 파일을 가진 곳의 경로로 이동하기
+~~~
+cd /etc/rabbitmq/server
+~~~
+
+- 권한 변경
+~~~
+chmod rabbitmq:rabbitmq key.pem(error가 나는 pem 파일에 대해 권한 변경)
+~~~
+
+- 다시 restart 하고, openssl s_client 명령어 실행해보기
+~~~
+service rabbitmq-server restart
+
+openssl s_client -connect 127.0.0.1:5671 -tls1
+~~~
+
+##### 잘된 경우 Log file
+결과 : 
+![4](https://user-images.githubusercontent.com/37536415/61682752-dd654780-ad4d-11e9-99d3-ea84437cc51e.png)
+
+----------------
+## node js로 ssl connection
+
+- /etc/rabbitmq/client 디렉토리로 이동
+~~~
+cd /etc/rabbitmq/client
+~~~
+
+- npm init
+~~~
+npm init
+~~~
+
+아래와 같이 name, version, description 등을 질문할 때, 그냥 enter key 누르면 됨.
+![5](https://user-images.githubusercontent.com/37536415/61682843-32a15900-ad4e-11e9-98e5-771cb9ace1e3.png)
+
+~~~
+ls
+~~~
+
+디렉토리를 살펴보면, package.json이라는 파일 생성(아래 명령어로 내부 살펴보기)
+~~~
+vi package.json
+~~~
+
+- express, amqplib를 설치해야 함
+~~~
+npm install express -D
+npm install amqplib -D
+~~~
+
+- 다시 package.json 내부 살펴보기
+~~~
+vi package.json
+~~~
+내부 : ![6](https://user-images.githubusercontent.com/37536415/61683042-00dcc200-ad4f-11e9-9dd5-7dae9440ef41.png)
+
+- index.json 파일 만들기
+~~~
+vi index.json
+~~~
+
+- 아래 내용 붙여넣기(주의할 점 : 생성한 .pem 경로 설정을 잘 해주어야 함. 아래의 코드는 위의 설명한 내용을 기준으로 경로 설정함.)
+~~~
+var fs = require('fs')
+const path = require('path')
+
+var opts = {
+  cert: fs.readFileSync(path.resolve(__dirname, '/etc/rabbitmq/server/cert.pem')),
+  key: fs.readFileSync(path.resolve(__dirname, '/etc/rabbitmq/server/key.pem')),
+  ca: [fs.readFileSync(path.resolve(__dirname, '/etc/rabbitmq/testca/cacert.pem'))],
+  rejectUnauthorized: false
+}
+
+var q = 'tasks'
+
+function bail (err) {
+  console.error(err)
+  process.exit(1)
+}
+
+// Publisher
+function publisher (conn) {
+  conn.createChannel(onOpen)
+  function onOpen (err, ch) {
+    if (err != null) bail(err)
+    ch.assertQueue(q)
+    const msg = 'something to do'
+    ch.sendToQueue(q, Buffer.from(msg))
+    console.log('Publisher: ', msg)
+  }
+}
+
+// Consumer
+function consumer (conn) {
+  conn.createChannel(onOpen)
+  function onOpen (err, ch) {
+    if (err != null) bail(err)
+    ch.assertQueue(q)
+    ch.consume(q, function (msg) {
+      if (msg !== null) {
+        console.log('Consumer: ', msg.content.toString())
+        ch.ack(msg)
+      }
+    })
+  }
+}
+
+require('amqplib/callback_api')
+  .connect('amqp://guest:guest@localhost:5672', opts, function (err, conn) {
+    if (err != null) bail(err)
+    consumer(conn)
+    publisher(conn)
+  })
+~~~
+
+- 위의 내용을 저장하고, index.js 파일 실행
+~~~
+node index.js
+~~~
+결과 : ![7](https://user-images.githubusercontent.com/37536415/61683315-10103f80-ad50-11e9-94b0-707b9aca5d45.png)
 
 
 
