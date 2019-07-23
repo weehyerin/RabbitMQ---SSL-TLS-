@@ -106,7 +106,7 @@ ubuntu에서 http://localhost:15672 로 접속
 ###### what is CA? 인증 기관(certificate authority)
 
 ##### 시작은 root directory
-1) 디렉토리 만들기
+### 1. 디렉토리 만들기
 ~~~
 cd etc
 ~~~
@@ -124,7 +124,7 @@ echo 01 > serial
 touch index.txt
 ~~~
 
-2) testca 디렉토리에 openssl.cnf 파일 생성
+### 2. testca 디렉토리에 openssl.cnf 파일 생성
 ~~~
 vi openssl.cnf
 ~~~
@@ -185,32 +185,35 @@ keyUsage = keyEncipherment
 extendedKeyUsage = 1.3.6.1.5.5.7.3.1
 ~~~
 
-3) openssl 명령어 .pem과 .cer 생성
-3-1) pem 생성 : cakey.pem 생성
+### 3. openssl 명령어 .pem과 .cer 생성
+#### 3-1. pem 생성 : cakey.pem 생성
 ~~~
 openssl req -x509 -config openssl.cnf -newkey rsa:2048 -days 365 \
     -out cacert.pem -outform PEM -subj /CN=MyTestCA/ -nodes
 ~~~
 결과 : 
 <img width="575" alt="1" src="https://user-images.githubusercontent.com/37536415/61680961-81e38b80-ad46-11e9-8a64-61c2bfb4105c.png">
-3-2) cem 생성
+
+#### 3-2. cem 생성
 ~~~
 openssl x509 -in cacert.pem -out cacert.cer -outform DER
 ~~~
 결과 : <img width="618" alt="2" src="https://user-images.githubusercontent.com/37536415/61681007-b48d8400-ad46-11e9-9894-fab2e8355988.png">
 
-4) server용 key 생성
+### 4. server용 key 생성
 - testca 디렉토리 공간(/etc/rabbitmq)에서 server 디렉토리 만들기
 ~~~
 cd /etc/rabbitmq
 mkdir server
 ~~~
+
 - server 디렉토리에서 pem 만들기
 ~~~
 cd server
 openssl genrsa -out key.pem 2048
 ~~~
 결과 : <img width="617" alt="3" src="https://user-images.githubusercontent.com/37536415/61681138-38e00700-ad47-11e9-8500-c40604334fa6.png">
+
 ~~~
 openssl req -new -key key.pem -out req.pem -outform PEM \
   -subj /CN=$(hostname)/O=server/ -nodes
@@ -233,16 +236,18 @@ openssl pkcs12 -export -out keycert.p12 -in cert.pem -inkey key.pem -passout pas
 결과 : <img width="619" alt="6" src="https://user-images.githubusercontent.com/37536415/61681228-a724c980-ad47-11e9-93ad-f46d8b7a9edd.png">
 
 
-5) client 용 key 생성
+### 5. client 용 key 생성
 - rabbitmq 디렉토리로 이동(/etc/rabbitmq)
 ~~~
 cd /etc/rabbitmq
 ~~~
+
 - client 디렉토리 생성
 ~~~
 mkdir client
 cd client
 ~~~
+
 - key 생성
 ~~~
 openssl genrsa -out key.pem 2048
